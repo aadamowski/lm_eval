@@ -1,0 +1,64 @@
+task: tmp_handling_eval
+dataset_path: json
+dataset_kwargs:
+  data_files:
+    test: data/prompts.jsonl
+test_split: test
+output_type: generate_until
+doc_to_text: |
+  When you want to call a tool, output ONLY a single JSON object (no additional explanation, no code fences, and no surrounding text). The response must be valid JSON representing an OpenAI-style function call with keys `name` and `arguments`, for example:
+    {"name": "write", "arguments": {"path": "/path/to/directory/filename.txt", "content": "hello"}}
+
+  Follow the function schema below exactly for function names and parameter names:
+  - `write`: `arguments` must include `path` (string) and `content` (string).
+  - `bash`: `arguments` must include `command` (string) and optional `timeout` (number).
+
+  Do not include natural-language description or any extra text; output must be exactly one JSON object.
+
+  {{prompt}}
+doc_to_target: "{{target}}"
+generation_kwargs:
+  max_gen_toks: 4096
+  until: ["User:"]
+  # Expose a simulated `write` tool (OpenAI-style functions schema).
+  # The model may decide to call this function; we pass it through to the model API.
+  functions:
+    - name: write
+      description: "Write content to a file."
+      parameters:
+        type: object
+        properties:
+          path:
+            type: string
+            description: "Path to write to"
+          content:
+            type: string
+            description: "Content to write to the file"
+        required:
+          - path
+          - content
+    - name: bash
+      description: "Execute a shell command (compile/run scripts)."
+      parameters:
+        type: object
+        properties:
+          command:
+            type: string
+            description: "Shell command to execute"
+          timeout:
+            type: number
+            description: "Optional timeout in seconds"
+        required:
+          - command
+  # Let the model decide whether to call the function or not.
+  function_call: "auto"
+metric_list:
+  - metric: regex_reward_count
+    aggregation: mean
+    higher_is_better: true
+  - metric: regex_penalty_count
+    aggregation: mean
+    higher_is_better: false
+  - metric: regex_net_score
+    aggregation: mean
+    higher_is_better: true
